@@ -5,21 +5,9 @@
       <v-col cols="12" md="6">
         <v-card class="pa-4 settings-card mb-4">
           <h2>Admin Profile</h2>
-          <v-text-field label="Name" value="Admin" prepend-icon="mdi-account" />
-          <v-text-field label="Email" value="admin@pettrackcare.com" prepend-icon="mdi-email" />
-          <v-btn color="primary" class="mt-2">Update Profile</v-btn>
-        </v-card>
-        <v-card class="pa-4 settings-card mb-4">
-          <h2>Notification Preferences</h2>
-          <v-switch label="Email Alerts" color="deepRed" />
-          <v-switch label="System Health Notifications" color="ownerColor" />
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card class="pa-4 settings-card mb-4">
-          <h2>Platform Configuration</h2>
-          <v-select :items="['Open', 'Maintenance', 'Closed']" label="Platform Status" />
-          <v-btn color="deepRed" class="mt-2">Save Changes</v-btn>
+          <v-text-field label="Name" v-model="adminProfile.name" prepend-icon="mdi-account" />
+          <v-text-field label="Email" v-model="adminProfile.email" prepend-icon="mdi-email" />
+          <v-btn color="primary" class="mt-2" @click="updateProfile" :loading="profileLoading">Update Profile</v-btn>
         </v-card>
       </v-col>
     </v-row>
@@ -27,7 +15,38 @@
 </template>
 
 <script setup>
-// Add logic for updating settings here
+import { ref, onMounted } from 'vue'
+import { supabase } from '../supabase.js'
+
+const adminProfile = ref({ name: '', email: '' })
+const profileLoading = ref(false)
+
+async function fetchSettings() {
+  // Fetch admin profile (assuming single admin with role 'Admin')
+  const { data: admin } = await supabase
+    .from('users')
+    .select('name, email')
+    .eq('role', 'Admin')
+    .single()
+  if (admin) {
+    adminProfile.value.name = admin.name ?? ''
+    adminProfile.value.email = admin.email ?? ''
+  }
+}
+
+async function updateProfile() {
+  profileLoading.value = true
+  await supabase
+    .from('users')
+    .update({
+      name: adminProfile.value.name,
+      email: adminProfile.value.email
+    })
+    .eq('role', 'Admin')
+  profileLoading.value = false
+}
+
+onMounted(fetchSettings)
 </script>
 
 <style scoped>

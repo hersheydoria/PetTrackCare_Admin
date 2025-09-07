@@ -5,6 +5,8 @@ import 'vuetify/styles'
 import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import '@mdi/font/css/materialdesignicons.css'
 import router from './router'
+import VChart from 'vue-echarts'
+import 'echarts'
 
 const vuetify = createVuetify({
 	theme: {
@@ -13,7 +15,6 @@ const vuetify = createVuetify({
 			customTheme: {
 				dark: false,
 				colors: {
-					deepRed: '#B82132',
 					lightBlush: '#F6DED8',
 					ownerColor: '#ECA1A6',
 					sitterColor: '#F2B28C',
@@ -31,6 +32,7 @@ const vuetify = createVuetify({
 })
 
 const app = createApp(App)
+app.component('v-chart', VChart)
 app.use(vuetify)
 app.use(router)
 app.mount('#app')

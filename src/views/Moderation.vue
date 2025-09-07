@@ -8,16 +8,18 @@
     </v-row>
     <v-data-table :headers="headers" :items="filteredPosts" class="mt-4 moderation-table" item-key="id" hide-default-footer>
       <template #item.actions="{ item }">
-        <v-btn size="small" color="deepRed">Hide</v-btn>
-        <v-btn size="small" color="lightBlush">Delete</v-btn>
+        <v-btn size="small" color="deepRed" class="action-btn" @click="hidePost(item.id)">Hide</v-btn>
+        <v-btn size="small" color="lightBlush" class="action-btn" @click="deletePost(item.id)">Delete</v-btn>
       </template>
     </v-data-table>
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-const filters = ['All', 'Flagged', 'Reported']
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '../supabase.js'
+
+const filters = ['All', 'Reported']
 const selectedFilter = ref('All')
 const headers = [
   { title: 'Preview', value: 'preview' },
@@ -25,15 +27,46 @@ const headers = [
   { title: 'Status', value: 'status' },
   { title: 'Actions', value: 'actions', sortable: false },
 ]
-const posts = [
-  { id: 1, preview: 'Lost dog near park', date: '2025-08-20', status: 'Flagged' },
-  { id: 2, preview: 'Found cat on Main St.', date: '2025-08-21', status: 'Reported' },
-  { id: 3, preview: 'Dog adoption event', date: '2025-08-22', status: 'Normal' },
-]
+
+const posts = ref([])
+
+async function fetchPosts() {
+  const { data, error } = await supabase
+    .from('community_posts')
+    .select('id, content, created_at, reported')
+    .order('created_at', { ascending: false })
+  posts.value = (data || []).map(post => ({
+    id: post.id,
+    preview: post.content?.slice(0, 40) ?? '',
+    date: post.created_at?.slice(0, 10) ?? '',
+    status: post.reported ? 'Reported' : 'Normal'
+  }))
+}
+
+async function hidePost(id) {
+  await supabase
+    .from('community_posts')
+    .update({ reported: false })
+    .eq('id', id)
+  await fetchPosts()
+}
+
+async function deletePost(id) {
+  await supabase
+    .from('community_posts')
+    .delete()
+    .eq('id', id)
+  await fetchPosts()
+}
+
+// Filtering logic: returns filtered posts based on selection
 const filteredPosts = computed(() => {
-  if (selectedFilter.value === 'All') return posts
-  return posts.filter(p => p.status === selectedFilter.value)
+  if (selectedFilter.value === 'All') return posts.value
+  if (selectedFilter.value === 'Reported') return posts.value.filter(p => p.status === 'Reported')
+  return posts.value
 })
+
+onMounted(fetchPosts)
 </script>
 
 <style scoped>
@@ -45,6 +78,12 @@ const filteredPosts = computed(() => {
 }
 .moderation-table >>> tbody tr.active-row {
   background: #ECA1A6;
+}
+.action-btn {
+  margin-right: 8px;
+}
+.action-btn:last-child {
+  margin-right: 0;
 }
 h1 {
   font-family: 'Avenir', system-ui, sans-serif;
