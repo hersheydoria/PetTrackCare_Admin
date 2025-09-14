@@ -97,16 +97,16 @@ async function fetchStats() {
 }
 
 async function fetchFlaggedPosts() {
-  // Show latest 3 reported posts from community_posts
+  // Get latest 3 flagged posts from reports table, join with community_posts for content
   const { data, error } = await supabase
-    .from('community_posts')
-    .select('id, content')
-    .eq('reported', true)
+    .from('reports')
+    .select('id, post_id, reason, community_posts(content)')
     .order('created_at', { ascending: false })
     .limit(3)
-  flaggedPosts.value = (data || []).map(post => ({
-    id: post.id,
-    reason: post.content?.slice(0, 50) || 'Reported post'
+  flaggedPosts.value = (data || []).map(report => ({
+    id: report.post_id,
+    reason: report.reason,
+    content: report.community_posts?.content?.slice(0, 50) || 'Reported post'
   }))
 }
 
