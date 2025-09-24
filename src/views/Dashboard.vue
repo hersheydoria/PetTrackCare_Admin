@@ -46,7 +46,7 @@
             <v-list-item
               v-for="post in flaggedPosts"
               :key="post.id"
-              :title="`Post #${post.id}`"
+              :title="post.post_content"
               :subtitle="post.reason"
             />
           </v-list>
@@ -97,40 +97,61 @@ async function fetchStats() {
 }
 
 async function fetchFlaggedPosts() {
-  // Get latest 3 flagged posts from reports table, join with community_posts for content
-  const { data, error } = await supabase
+  // Get latest 3 flagged posts from reports table
+  const { data: reportsData, error } = await supabase
     .from('reports')
-    .select('id, post_id, reason, community_posts(content)')
+    .select('id, post_id, reason')
     .order('created_at', { ascending: false })
     .limit(3)
-  flaggedPosts.value = (data || []).map(report => ({
+  if (error) {
+    flaggedPosts.value = []
+    return
+  }
+
+  // Get unique post_ids from reports
+  const postIds = [...new Set((reportsData || []).map(r => r.post_id))]
+  let postsMap = {}
+  if (postIds.length > 0) {
+    const { data: postsData, error: postsError } = await supabase
+      .from('community_posts')
+      .select('id, content')
+      .in('id', postIds)
+    if (!postsError && postsData) {
+      postsMap = Object.fromEntries(postsData.map(p => [p.id, p.content]))
+    }
+  }
+
+  flaggedPosts.value = (reportsData || []).map(report => ({
     id: report.post_id,
     reason: report.reason,
-    content: report.community_posts?.content?.slice(0, 50) || 'Reported post'
+    post_content: postsMap[report.post_id]?.slice(0, 50) + '...' || 'Reported post'
   }))
 }
 
 let healthInterval = null
 
 async function checkSystemHealth() {
+  console.log('Starting health check...')
   try {
     // API check: try a simple query
-    const { error: apiError } = await supabase.from('users').select('id').limit(1)
+    const { data, error: apiError } = await supabase.from('users').select('id').limit(1)
+    console.log('API check result:', { data, error: apiError })
     systemHealth.value.api = apiError ? 'Offline' : 'Online'
-
-    // Database check: use the same query result as API check
     systemHealth.value.database = apiError ? 'Issue' : 'Healthy'
 
-    // Storage check: try to list storage buckets (if using Supabase Storage)
-    if (supabase.storage) {
+    // Storage check: simplified approach
+    try {
       const { error: storageError } = await supabase.storage.listBuckets()
+      console.log('Storage check result:', { error: storageError })
       systemHealth.value.storage = storageError ? 'Issue' : 'OK'
-    } else {
+    } catch (storageErr) {
+      console.log('Storage not available:', storageErr)
       systemHealth.value.storage = 'N/A'
     }
-  } catch {
+  } catch (error) {
+    console.error('Health check error:', error)
     systemHealth.value.api = 'Offline'
-    systemHealth.value.database = 'Issue'
+    systemHealth.value.database = 'Issue' 
     systemHealth.value.storage = 'Issue'
   }
 }

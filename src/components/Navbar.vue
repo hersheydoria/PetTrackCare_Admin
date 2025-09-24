@@ -5,7 +5,13 @@
       PetTrackCare Admin
     </v-toolbar-title>
     <v-spacer />
-    <v-btn color="deepRed" variant="outlined" class="ml-4" @click="logout">Logout</v-btn>
+    <v-tooltip text="Logout" location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn color="deepRed" variant="outlined" class="mr-4 logout-btn" @click="logout" icon size="small" v-bind="props">
+          <v-icon size="small">mdi-logout</v-icon>
+        </v-btn>
+      </template>
+    </v-tooltip>
   </v-app-bar>
 </template>
 
@@ -20,3 +26,9 @@ async function logout() {
   window.location.href = '/login';
 }
 </script>
+
+<style scoped>
+.logout-btn:hover {
+  background-color: rgba(139, 0, 0, 0.8) !important;
+}
+</style>

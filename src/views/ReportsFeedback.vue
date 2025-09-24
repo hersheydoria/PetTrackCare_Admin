@@ -142,7 +142,9 @@ async function fetchReports() {
   // Get unique user_ids
   const userIds = [...new Set(feedbacks.map(fb => fb.user_id).filter(Boolean))]
   let usersMap = {}
+  
   if (userIds.length > 0) {
+    // Get names from users table
     const { data: users, error: usersError } = await supabase
       .from('users')
       .select('id, name')
@@ -154,6 +156,7 @@ async function fetchReports() {
 
   reports.value = (feedbacks || []).map(r => ({
     id: r.id,
+    user_id: r.user_id,
     user: usersMap[r.user_id] ?? 'Unknown',
     message: r.message,
     archived: r.archived === true || r.archived === 'true',
@@ -200,11 +203,62 @@ function respondToFeedback(item) {
 
 async function sendResponse() {
   if (!currentFeedback.value) return
-  await supabase
-    .from('feedback_responses')
-    .insert({ feedback_id: currentFeedback.value.id, message: responseMessage.value })
-  responseDialog.value = false
-  responseMessage.value = ''
+  
+  try {
+    console.log('Sending email for user_id:', currentFeedback.value.user_id)
+    
+    // Send email to user using Supabase Edge Function
+    const response = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabase.supabaseKey}`,
+      },
+      body: JSON.stringify({
+        user_id: currentFeedback.value.user_id,
+        subject: 'Response to Your Feedback - PetTrackCare',
+        html: `
+          <h2>Thank you for your feedback!</h2>
+          <p>Dear ${currentFeedback.value.user},</p>
+          <p>We have reviewed your feedback and wanted to respond:</p>
+          <div style="background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px;">
+            <strong>Your feedback:</strong><br>
+            ${currentFeedback.value.message}
+          </div>
+          <div style="background: #e3f2fd; padding: 15px; margin: 10px 0; border-radius: 5px;">
+            <strong>Our response:</strong><br>
+            ${responseMessage.value}
+          </div>
+          <p>Thank you for helping us improve PetTrackCare!</p>
+          <p>Best regards,<br>PetTrackCare Admin Team</p>
+        `
+      })
+    })
+
+    const responseText = await response.text()
+    console.log('Raw response:', responseText)
+    console.log('Response status:', response.status)
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${responseText}`)
+    }
+
+    const data = JSON.parse(responseText)
+    console.log('Parsed response:', data)
+
+    if (data?.success && !data?.data?.error) {
+      alert('Response sent successfully via email!')
+    } else {
+      const errorMsg = data?.data?.error?.message || data?.error || 'Unknown error'
+      alert('Email sending failed: ' + errorMsg)
+    }
+
+    responseDialog.value = false
+    responseMessage.value = ''
+  } catch (error) {
+    console.error('Error sending response:', error)
+    alert('Failed to send response: ' + error.message)
+  }
 }
 
 onMounted(fetchReports)
