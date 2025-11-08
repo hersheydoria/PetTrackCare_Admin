@@ -66,8 +66,4 @@ onBeforeUnmount(() => {
   background-color: #F6DED8 !important;
   transition: background 0.2s;
 }
-/* Hide sidebar on small screens unless toggled */
-.sidebar {
-  /* No extra styles needed, handled by v-navigation-drawer props */
-}
 </style>
