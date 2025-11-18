@@ -7,7 +7,6 @@ const ReportsFeedback = () => import('./views/ReportsFeedback.vue')
 const Login = () => import('./views/Login.vue')
 const Moderation = () => import('./views/Moderation.vue')
 const UsageMonitoring = () => import('./views/UsageMonitoring.vue')
-const ModelTesting = () => import('./views/ModelTesting.vue')
 
 const routes = [
   { path: '/login', name: 'Login', component: Login },
@@ -17,7 +16,6 @@ const routes = [
   { path: '/reports-feedback', name: 'ReportsFeedback', component: ReportsFeedback },
   { path: '/moderation', name: 'Moderation', component: Moderation },
   { path: '/usage-monitoring', name: 'UsageMonitoring', component: UsageMonitoring },
-  { path: '/model-testing', name: 'ModelTesting', component: ModelTesting },
 ]
 
 const router = createRouter({

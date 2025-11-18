@@ -1,39 +1,207 @@
 <template>
-  <v-container class="py-6">
-    <h1>User Account Management</h1>
-    <v-data-table :headers="headers" :items="users" class="mt-4 user-table" item-key="id" hide-default-footer>
-      <template #item.actions="{ item }">
-        <v-btn size="small" color="primary" class="action-btn" @click="openEditDialog(item)">Edit</v-btn>
-        <v-btn
-          size="small"
-          :color="item.status === 'Inactive' ? 'success' : 'sitterColor'"
-          class="action-btn"
-          @click="toggleUserStatus(item)"
+  <v-container class="py-8 px-6">
+    <div class="user-header mb-8">
+      <div>
+        <h1 class="text-h3 font-weight-bold mb-2">User Management</h1>
+        <p class="text-subtitle-1 text-medium-emphasis">Manage platform users, roles, and account status</p>
+      </div>
+      <div class="d-flex align-center gap-3">
+        <v-chip 
+          color="primary" 
+          size="large"
+          prepend-icon="mdi-account-multiple"
+          class="px-4"
         >
-          {{ item.status === 'Inactive' ? 'Activate' : 'Deactivate' }}
-        </v-btn>
-        <v-btn size="small" color="deepRed" class="action-btn" @click="deleteUser(item.id)">Delete</v-btn>
-      </template>
-    </v-data-table>
+          {{ users.length }} Users
+        </v-chip>
+      </div>
+    </div>
 
-    <v-dialog v-model="editDialog" max-width="400">
-      <v-card>
-        <v-card-title>Edit User</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="editUser.name" label="Name" />
+    <v-card class="user-card" elevation="0">
+      <v-data-table 
+        :headers="headers" 
+        :items="users" 
+        class="user-table" 
+        item-key="id"
+        :items-per-page="10"
+      >
+        <template #item.name="{ item }">
+          <div class="d-flex align-center">
+            <v-avatar 
+              :color="item.role === 'Pet Owner' ? 'ownerColor' : 'sitterColor'" 
+              size="40" 
+              class="mr-3"
+              :image="item.profile_picture"
+            >
+              <v-icon v-if="!item.profile_picture" color="white" size="small">
+                {{ item.role === 'Pet Owner' ? 'mdi-home-account' : 'mdi-hand-helping' }}
+              </v-icon>
+            </v-avatar>
+            <div>
+              <div class="font-weight-medium">{{ item.name }}</div>
+              <div class="text-caption text-medium-emphasis">ID: {{ item.id.substring(0, 8) }}...</div>
+            </div>
+          </div>
+        </template>
+
+        <template #item.role="{ item }">
+          <v-chip 
+            :color="item.role === 'Pet Owner' ? 'ownerColor' : 'sitterColor'" 
+            size="small"
+            variant="flat"
+            text-color="white"
+          >
+            {{ item.role }}
+          </v-chip>
+        </template>
+
+        <template #item.status="{ item }">
+          <v-chip 
+            :color="item.status === 'Active' ? 'success' : 'warning'" 
+            size="small"
+            variant="tonal"
+            :prepend-icon="item.status === 'Active' ? 'mdi-check-circle' : 'mdi-alert-circle'"
+          >
+            {{ item.status }}
+          </v-chip>
+        </template>
+
+        <template #item.actions="{ item }">
+          <div class="action-buttons">
+            <v-btn 
+              size="small" 
+              color="primary" 
+              variant="tonal"
+              prepend-icon="mdi-pencil"
+              @click="openEditDialog(item)"
+            >
+              Edit
+            </v-btn>
+            <v-btn
+              size="small"
+              :color="item.status === 'Inactive' ? 'success' : 'warning'"
+              :variant="item.status === 'Inactive' ? 'flat' : 'tonal'"
+              :prepend-icon="item.status === 'Inactive' ? 'mdi-check' : 'mdi-pause'"
+              @click="toggleUserStatus(item)"
+            >
+              {{ item.status === 'Inactive' ? 'Activate' : 'Deactivate' }}
+            </v-btn>
+            <v-btn 
+              size="small" 
+              color="deepRed" 
+              variant="tonal"
+              prepend-icon="mdi-delete"
+              @click="openDeleteDialog(item)"
+            >
+              Delete
+            </v-btn>
+          </div>
+        </template>
+
+        <template #no-data>
+          <div class="text-center py-12">
+            <v-icon size="80" color="primary" class="mb-4">mdi-account-multiple-outline</v-icon>
+            <h3 class="text-h6 mb-2">No Users Found</h3>
+            <p class="text-body-2 text-medium-emphasis">No user accounts to display</p>
+          </div>
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Edit Dialog -->
+    <v-dialog v-model="editDialog" max-width="500">
+      <v-card class="pa-6">
+        <v-card-title class="d-flex align-center pa-0 mb-6">
+          <v-icon color="primary" class="mr-3" size="large">mdi-account-edit</v-icon>
+          <span class="text-h6">Edit User</span>
+        </v-card-title>
+        <v-card-text class="pa-0">
+          <v-text-field 
+            v-model="editUser.name" 
+            label="Full Name" 
+            density="comfortable"
+            prepend-inner-icon="mdi-account"
+            variant="outlined"
+            class="mb-4"
+          />
           <v-select
             v-model="editUser.role"
             :items="['Pet Owner', 'Pet Sitter']"
             label="Role"
+            density="comfortable"
+            prepend-inner-icon="mdi-briefcase"
+            variant="outlined"
           />
         </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="primary" @click="saveEdit">Save</v-btn>
-          <v-btn color="grey" @click="editDialog = false">Cancel</v-btn>
+        <v-card-actions class="pa-0 pt-6">
+          <v-spacer></v-spacer>
+          <v-btn 
+            color="grey" 
+            variant="text"
+            @click="editDialog = false"
+          >
+            Cancel
+          </v-btn>
+          <v-btn 
+            color="primary" 
+            variant="flat"
+            prepend-icon="mdi-check"
+            @click="saveEdit"
+          >
+            Save Changes
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <v-dialog v-model="deleteDialog" max-width="500">
+      <v-card class="pa-6">
+        <v-card-title class="d-flex align-center pa-0 mb-4">
+          <v-icon color="error" class="mr-3" size="large">mdi-alert-circle</v-icon>
+          <span class="text-h6">Delete User</span>
+        </v-card-title>
+        <v-card-text class="pa-0 mb-6">
+          <p class="text-body-1 mb-3">
+            Are you sure you want to delete <strong>{{ deleteUserName }}</strong>?
+          </p>
+          <v-alert type="warning" variant="tonal">
+            This action will permanently remove the user account and cannot be undone.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-0">
+          <v-spacer></v-spacer>
+          <v-btn 
+            color="grey" 
+            variant="text"
+            @click="deleteDialog = false"
+          >
+            Cancel
+          </v-btn>
+          <v-btn 
+            color="error" 
+            variant="flat"
+            prepend-icon="mdi-delete"
+            @click="confirmDelete"
+          >
+            Delete User
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Status Snackbar -->
+    <v-snackbar
+      v-model="snackbar"
+      :color="snackbarColor"
+      :timeout="3000"
+      location="top"
+    >
+      <div class="d-flex align-center">
+        <v-icon class="mr-2">{{ snackbarIcon }}</v-icon>
+        {{ snackbarText }}
+      </div>
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -42,35 +210,84 @@ import { ref, onMounted } from 'vue'
 import { supabase } from '../supabase.js'
 
 const headers = [
-  { title: 'Name', value: 'name' },
-  { title: 'Role', value: 'role' },
-  { title: 'Status', value: 'status' },
-  { title: 'Actions', value: 'actions', sortable: false },
+  { title: 'Name', value: 'name', width: '250px' },
+  { title: 'Role', value: 'role', width: '150px' },
+  { title: 'Status', value: 'status', width: '120px' },
+  { title: 'Actions', value: 'actions', sortable: false, width: '350px' },
 ]
 
 const users = ref([])
 const editDialog = ref(false)
+const deleteDialog = ref(false)
 const editUser = ref({ id: '', name: '', role: '' })
+const deleteUserName = ref('')
+const deleteUserId = ref('')
+const snackbar = ref(false)
+const snackbarText = ref('')
+const snackbarColor = ref('success')
+const snackbarIcon = ref('mdi-check-circle')
+
+function showSnackbar(text, color = 'success', icon = 'mdi-check-circle') {
+  snackbarText.value = text
+  snackbarColor.value = color
+  snackbarIcon.value = icon
+  snackbar.value = true
+}
 
 async function fetchUsers() {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, name, role, status')
-    .neq('role', 'Admin')
-  users.value = (data || []).map(u => ({
-    id: u.id,
-    name: u.name,
-    role: u.role,
-    status: u.status ?? 'Active'
-  }))
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, name, role, status, profile_picture')
+      .neq('role', 'Admin')
+    
+    if (error) {
+      console.error('Error fetching users:', error)
+      showSnackbar('Failed to load users: ' + error.message, 'error', 'mdi-alert-circle')
+      users.value = []
+      return
+    }
+
+    users.value = (data || []).map(u => {
+      let imageUrl = null
+      if (u.profile_picture) {
+        // Check if it's already a full URL
+        if (u.profile_picture.startsWith('http')) {
+          imageUrl = u.profile_picture
+        } else {
+          // Construct the Supabase Storage URL
+          imageUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/profile_pictures/profile_images/${u.profile_picture}`
+        }
+      }
+      
+      return {
+        id: u.id,
+        name: u.name || 'Unknown',
+        email: '',
+        role: u.role || 'Pet Owner',
+        status: u.status ?? 'Active',
+        profile_picture: imageUrl
+      }
+    })
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    showSnackbar('An unexpected error occurred', 'error', 'mdi-alert-circle')
+    users.value = []
+  }
 }
 
 async function toggleUserStatus(user) {
   const newStatus = user.status === 'Inactive' ? 'Active' : 'Inactive'
-  await supabase
+  const { error } = await supabase
     .from('users')
     .update({ status: newStatus })
     .eq('id', user.id)
+  
+  if (error) {
+    showSnackbar('Failed to update user status', 'error', 'mdi-alert-circle')
+  } else {
+    showSnackbar(`User ${newStatus === 'Active' ? 'activated' : 'deactivated'} successfully`, 'success', 'mdi-check-circle')
+  }
   await fetchUsers()
 }
 
@@ -80,22 +297,41 @@ function openEditDialog(user) {
 }
 
 async function saveEdit() {
-  await supabase
+  const { error } = await supabase
     .from('users')
     .update({
       name: editUser.value.name,
       role: editUser.value.role
     })
     .eq('id', editUser.value.id)
+  
+  if (error) {
+    showSnackbar('Failed to update user', 'error', 'mdi-alert-circle')
+  } else {
+    showSnackbar('User updated successfully', 'success', 'mdi-check-circle')
+  }
   editDialog.value = false
   await fetchUsers()
 }
 
-async function deleteUser(id) {
-  await supabase
+function openDeleteDialog(user) {
+  deleteUserId.value = user.id
+  deleteUserName.value = user.name
+  deleteDialog.value = true
+}
+
+async function confirmDelete() {
+  const { error } = await supabase
     .from('users')
     .delete()
-    .eq('id', id)
+    .eq('id', deleteUserId.value)
+  
+  if (error) {
+    showSnackbar('Failed to delete user', 'error', 'mdi-alert-circle')
+  } else {
+    showSnackbar('User deleted successfully', 'success', 'mdi-check-circle')
+  }
+  deleteDialog.value = false
   await fetchUsers()
 }
 
@@ -103,23 +339,80 @@ onMounted(fetchUsers)
 </script>
 
 <style scoped>
-.user-table >>> tbody tr {
-  transition: background 0.2s;
+.user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
-.user-table >>> tbody tr:hover {
-  background: #F6DED8;
+
+.user-card {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
-.user-table >>> tbody tr.active-row {
-  background: #ECA1A6;
+
+.user-table {
+  background: transparent;
 }
-.action-btn {
-  margin-right: 8px;
+
+.user-table :deep(thead) {
+  background: linear-gradient(145deg, #fafafa 0%, #f5f5f5 100%);
 }
-.action-btn:last-child {
-  margin-right: 0;
+
+.user-table :deep(thead th) {
+  font-weight: 600 !important;
+  color: #424242 !important;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
 }
+
+.user-table :deep(tbody tr) {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.user-table :deep(tbody tr:hover) {
+  background: #FFF3F0 !important;
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.user-table :deep(tbody td) {
+  padding: 16px 12px !important;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 h1 {
   font-family: 'Avenir', system-ui, sans-serif;
   font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 960px) {
+  .user-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .action-buttons > * {
+    width: 100%;
+  }
+}
+
+:deep(.v-table__wrapper) {
+  overflow: hidden;
 }
 </style>
