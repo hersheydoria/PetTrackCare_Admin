@@ -25,7 +25,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { supabase } from '../supabase'
+import { authenticateAdmin } from '../apiClient.js'
 
 const isCheckingSession = ref(false)
 const isLoading = ref(false)
@@ -44,36 +44,22 @@ const passwordRules = [
 // 🔹 LOGIN for existing admin
 async function login() {
   isLoading.value = true
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value,
-  })
-  if (error) {
+  try {
+    const data = await authenticateAdmin({
+      email: email.value,
+      password: password.value
+    })
+    const token = data?.access_token || data?.token
+    if (!token) {
+      throw new Error('Invalid login response')
+    }
+    localStorage.setItem('pettrackcare_admin_token', token)
     isLoading.value = false
-    alert(error.message)
-    return
-  }
-  const userId = data.user?.id
-  if (!userId) {
+    window.location.href = '/'
+  } catch (err) {
     isLoading.value = false
-    alert('No user found')
-    return
+    alert(err?.message || 'Login failed. Please check your credentials.')
   }
-  // check role in public.users
-  const { data: userRows, error: userError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', userId)
-    .single()
-  if (userError || !userRows || userRows.role !== 'Admin') {
-    isLoading.value = false
-    alert('Access denied: Only Admins can log in.')
-    await supabase.auth.signOut()
-    return
-  }
-  localStorage.setItem('isLoggedIn', 'true')
-  isLoading.value = false
-  window.location.href = '/'
 }
 </script>
 

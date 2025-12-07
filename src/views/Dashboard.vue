@@ -157,7 +157,11 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { supabase } from '../supabase.js'
+import {
+  fetchDashboardStats,
+  fetchSystemHealth,
+  fetchModerationReports
+} from '../apiClient.js'
 
 const stats = ref({
   activeUsers: 0,
@@ -172,85 +176,53 @@ const systemHealth = ref({
 })
 
 async function fetchStats() {
-  // Active users: users with role not 'Admin'
-  const { count: userCount, error: userError } = await supabase
-    .from('users')
-    .select('*', { count: 'exact', head: true })
-    .neq('role', 'Admin')
-  stats.value.activeUsers = userCount ?? 0
-
-  // Posts this week: community_posts created in last 7 days
-  const { count: postCount, error: postError } = await supabase
-    .from('community_posts')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-  stats.value.postsThisWeek = postCount ?? 0
-
-  // Lost pet alerts: pets where is_missing = true
-  const { count: alertCount, error: alertError } = await supabase
-    .from('pets')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_missing', true)
-  stats.value.lostPetAlerts = alertCount ?? 0
+  try {
+    const data = await fetchDashboardStats()
+    stats.value = {
+      activeUsers: data.active_users ?? stats.value.activeUsers,
+      postsThisWeek: data.posts_this_week ?? stats.value.postsThisWeek,
+      lostPetAlerts: data.lost_pet_alerts ?? stats.value.lostPetAlerts
+    }
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error)
+  }
 }
 
 async function fetchFlaggedPosts() {
-  // Get latest 3 flagged posts from reports table
-  const { data: reportsData, error } = await supabase
-    .from('reports')
-    .select('id, post_id, reason')
-    .order('created_at', { ascending: false })
-    .limit(3)
-  if (error) {
+  try {
+    const reportsData = await fetchModerationReports()
+    flaggedPosts.value = (reportsData || []).slice(0, 3).map(report => {
+      const content = report.post?.content ?? report.post_content ?? 'Reported post'
+      const snippet = content.length > 100 ? `${content.slice(0, 100)}...` : content
+      return {
+        id: report.post?.id ?? report.post_id,
+        reason: report.reason,
+        post_content: snippet
+      }
+    })
+  } catch (error) {
+    console.error('Error loading flagged posts:', error)
     flaggedPosts.value = []
-    return
   }
-
-  // Get unique post_ids from reports
-  const postIds = [...new Set((reportsData || []).map(r => r.post_id))]
-  let postsMap = {}
-  if (postIds.length > 0) {
-    const { data: postsData, error: postsError } = await supabase
-      .from('community_posts')
-      .select('id, content')
-      .in('id', postIds)
-    if (!postsError && postsData) {
-      postsMap = Object.fromEntries(postsData.map(p => [p.id, p.content]))
-    }
-  }
-
-  flaggedPosts.value = (reportsData || []).map(report => ({
-    id: report.post_id,
-    reason: report.reason,
-    post_content: postsMap[report.post_id]?.slice(0, 50) + '...' || 'Reported post'
-  }))
 }
 
 let healthInterval = null
 
 async function checkSystemHealth() {
-  console.log('Starting health check...')
   try {
-    // API check: try a simple query
-    const { data, error: apiError } = await supabase.from('users').select('id').limit(1)
-    console.log('API check result:', { data, error: apiError })
-    systemHealth.value.api = apiError ? 'Offline' : 'Online'
-    systemHealth.value.database = apiError ? 'Issue' : 'Healthy'
-
-    // Storage check: simplified approach
-    try {
-      const { error: storageError } = await supabase.storage.listBuckets()
-      console.log('Storage check result:', { error: storageError })
-      systemHealth.value.storage = storageError ? 'Issue' : 'OK'
-    } catch (storageErr) {
-      console.log('Storage not available:', storageErr)
-      systemHealth.value.storage = 'N/A'
+    const data = await fetchSystemHealth()
+    systemHealth.value = {
+      api: data.api ?? 'Offline',
+      database: data.database ?? 'Issue',
+      storage: data.storage ?? 'Issue'
     }
   } catch (error) {
     console.error('Health check error:', error)
-    systemHealth.value.api = 'Offline'
-    systemHealth.value.database = 'Issue' 
-    systemHealth.value.storage = 'Issue'
+    systemHealth.value = {
+      api: 'Offline',
+      database: 'Issue',
+      storage: 'Issue'
+    }
   }
 }
 

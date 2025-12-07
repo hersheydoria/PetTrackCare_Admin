@@ -189,7 +189,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { supabase } from '../supabase.js'
+import {
+  fetchModerationReports,
+  deleteCommunityPost,
+  deleteModerationReport
+} from '../apiClient.js'
 
 const reportHeaders = [
   { title: 'Report ID', value: 'id', width: '100px' },
@@ -242,58 +246,35 @@ function showSnackbar(text, color = 'success', icon = 'mdi-check-circle') {
 }
 
 async function fetchReports() {
-  const { data: reportsData, error } = await supabase
-    .from('reports')
-    .select('id, post_id, user_id, reason, created_at')
-    .order('created_at', { ascending: false })
-  if (error) {
+  try {
+    const reportsData = await fetchModerationReports()
+    allReports.value = (reportsData || []).map(report => {
+      const post = report.post || {}
+      const userName = report.user?.name || report.user_name || report.user_id || 'Unknown'
+      const isAnonymous = report.reason?.toLowerCase().includes('anonymous')
+      return {
+        id: report.id,
+        post_id: post.id ?? report.post_id,
+        post_type: post.type ?? report.post_type ?? '',
+        post_content: post.content ?? report.post_content ?? 'Post not found',
+        post_deleted: post.deleted ?? report.post_deleted ?? false,
+        user_name: isAnonymous ? 'Anonymous' : userName,
+        reason: report.reason,
+        created_at: report.created_at ? new Date(report.created_at).toLocaleDateString('en-PH', {
+          timeZone: 'Asia/Manila',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : ''
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching reports:', error)
     allReports.value = []
     showSnackbar('Failed to load reports', 'error', 'mdi-alert-circle')
-    return
   }
-
-  const postIds = [...new Set((reportsData || []).map(r => r.post_id))]
-  const userIds = [...new Set((reportsData || []).map(r => r.user_id))]
-  let postsMap = {}
-  let usersMap = {}
-
-  if (postIds.length > 0) {
-    const { data: postsData, error: postsError } = await supabase
-      .from('community_posts')
-      .select('id, type, content')
-      .in('id', postIds)
-    if (!postsError && postsData) {
-      postsMap = Object.fromEntries(postsData.map(p => [p.id, { type: p.type, content: p.content }]))
-    }
-  }
-
-  if (userIds.length > 0) {
-    const { data: usersData, error: usersError } = await supabase
-      .from('users')
-      .select('id, name')
-      .in('id', userIds)
-    if (!usersError && usersData) {
-      usersMap = Object.fromEntries(usersData.map(u => [u.id, u.name]))
-    }
-  }
-
-  allReports.value = (reportsData || []).map(r => ({
-    id: r.id,
-    post_id: r.post_id,
-    post_type: postsMap[r.post_id]?.type ?? '',
-    post_content: postsMap[r.post_id]?.content ?? 'Post not found',
-    post_deleted: !postsMap[r.post_id],
-    user_name: r.reason.toLowerCase().includes('anonymous') ? 'Anonymous' : (usersMap[r.user_id] ?? r.user_id),
-    reason: r.reason,
-    created_at: r.created_at ? new Date(r.created_at).toLocaleDateString('en-PH', {
-      timeZone: 'Asia/Manila',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }) : ''
-  }))
 }
 
 function deletePost(postId) {
@@ -306,46 +287,8 @@ async function confirmDelete() {
   const postId = postToDelete.value
 
   try {
-    const { data: comments, error: getCommentsError } = await supabase
-      .from('comments')
-      .select('id')
-      .eq('post_id', postId)
-    
-    if (getCommentsError) {
-      console.error('Error getting comments:', getCommentsError)
-      showSnackbar('Failed to delete post: ' + getCommentsError.message, 'error', 'mdi-alert-circle')
-      return
-    }
-
-    if (comments && comments.length > 0) {
-      const commentIds = comments.map(c => c.id)
-      const { error: notificationError } = await supabase
-        .from('notifications')
-        .delete()
-        .in('comment_id', commentIds)
-      
-      if (notificationError) {
-        console.error('Error deleting notifications:', notificationError)
-      }
-    }
-    
-    const { error: commentError } = await supabase
-      .from('comments')
-      .delete()
-      .eq('post_id', postId)
-    
-    const { error: postError } = await supabase
-      .from('community_posts')
-      .delete()
-      .eq('id', postId)
-    
-    if (postError || commentError) {
-      const errorMsg = postError?.message || commentError?.message
-      console.error('Error deleting post:', errorMsg)
-      showSnackbar('Failed to delete post: ' + errorMsg, 'error', 'mdi-alert-circle')
-    } else {
-      showSnackbar('Post and related data deleted successfully', 'success', 'mdi-check-circle')
-    }
+    await deleteCommunityPost(postId)
+    showSnackbar('Post and related data deleted successfully', 'success', 'mdi-check-circle')
   } catch (error) {
     console.error('Error in delete operation:', error)
     showSnackbar('Failed to delete post: ' + error.message, 'error', 'mdi-alert-circle')
@@ -355,10 +298,13 @@ async function confirmDelete() {
 }
 
 async function dismissReport(reportId) {
-  await supabase
-    .from('reports')
-    .delete()
-    .eq('id', reportId)
+  try {
+    await deleteModerationReport(reportId)
+  } catch (error) {
+    console.error('Error dismissing report:', error)
+    showSnackbar('Failed to dismiss report', 'error', 'mdi-alert-circle')
+    return
+  }
   showSnackbar('Report dismissed', 'info', 'mdi-information')
   await fetchReports()
 }

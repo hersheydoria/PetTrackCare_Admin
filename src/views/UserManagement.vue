@@ -207,7 +207,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { supabase } from '../supabase.js'
+import {
+  fetchPlatformUsers,
+  updatePlatformUser,
+  deletePlatformUser
+} from '../apiClient.js'
 
 const headers = [
   { title: 'Name', value: 'name', width: '250px' },
@@ -236,79 +240,44 @@ function showSnackbar(text, color = 'success', icon = 'mdi-check-circle') {
 
 async function fetchUsers() {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, name, role, status, profile_picture')
-      .neq('role', 'Admin')
-    
-    if (error) {
-      console.error('Error fetching users:', error)
-      showSnackbar('Failed to load users: ' + error.message, 'error', 'mdi-alert-circle')
-      users.value = []
-      return
-    }
-
-    users.value = (data || []).map(u => {
-      let imageUrl = null
-      if (u.profile_picture) {
-        // Check if it's already a full URL
-        if (u.profile_picture.startsWith('http')) {
-          imageUrl = u.profile_picture
-        } else {
-          // Construct the Supabase Storage URL
-          imageUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/profile_pictures/profile_images/${u.profile_picture}`
-        }
-      }
-      
-      return {
-        id: u.id,
-        name: u.name || 'Unknown',
-        email: '',
-        role: u.role || 'Pet Owner',
-        status: u.status ?? 'Active',
-        profile_picture: imageUrl
-      }
-    })
-  } catch (err) {
-    console.error('Unexpected error:', err)
-    showSnackbar('An unexpected error occurred', 'error', 'mdi-alert-circle')
+    const data = await fetchPlatformUsers()
+    users.value = (data || []).map(u => ({
+      id: u.id,
+      name: u.name || 'Unknown',
+      email: u.email || '',
+      role: u.role || 'Pet Owner',
+      status: u.status ?? 'Active',
+      profile_picture: u.profile_picture || null
+    }))
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    showSnackbar('Failed to load users', 'error', 'mdi-alert-circle')
     users.value = []
   }
 }
 
 async function toggleUserStatus(user) {
   const newStatus = user.status === 'Inactive' ? 'Active' : 'Inactive'
-  const { error } = await supabase
-    .from('users')
-    .update({ status: newStatus })
-    .eq('id', user.id)
-  
-  if (error) {
-    showSnackbar('Failed to update user status', 'error', 'mdi-alert-circle')
-  } else {
+  try {
+    await updatePlatformUser(user.id, { status: newStatus })
     showSnackbar(`User ${newStatus === 'Active' ? 'activated' : 'deactivated'} successfully`, 'success', 'mdi-check-circle')
+  } catch (error) {
+    console.error('Error updating user status:', error)
+    showSnackbar('Failed to update user status', 'error', 'mdi-alert-circle')
   }
   await fetchUsers()
 }
 
-function openEditDialog(user) {
-  editUser.value = { ...user }
-  editDialog.value = true
-}
-
 async function saveEdit() {
-  const { error } = await supabase
-    .from('users')
-    .update({
+  try {
+    await updatePlatformUser(editUser.value.id, {
       name: editUser.value.name,
       role: editUser.value.role
     })
-    .eq('id', editUser.value.id)
-  
-  if (error) {
-    showSnackbar('Failed to update user', 'error', 'mdi-alert-circle')
-  } else {
     showSnackbar('User updated successfully', 'success', 'mdi-check-circle')
+  } catch (error) {
+    console.error('Error updating user:', error)
+    showSnackbar('Failed to update user', 'error', 'mdi-alert-circle')
   }
   editDialog.value = false
   await fetchUsers()
@@ -321,15 +290,12 @@ function openDeleteDialog(user) {
 }
 
 async function confirmDelete() {
-  const { error } = await supabase
-    .from('users')
-    .delete()
-    .eq('id', deleteUserId.value)
-  
-  if (error) {
-    showSnackbar('Failed to delete user', 'error', 'mdi-alert-circle')
-  } else {
+  try {
+    await deletePlatformUser(deleteUserId.value)
     showSnackbar('User deleted successfully', 'success', 'mdi-check-circle')
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    showSnackbar('Failed to delete user', 'error', 'mdi-alert-circle')
   }
   deleteDialog.value = false
   await fetchUsers()

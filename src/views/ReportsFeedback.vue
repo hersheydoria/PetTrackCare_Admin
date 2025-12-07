@@ -88,7 +88,7 @@
               color="deepRed"
               variant="tonal"
               prepend-icon="mdi-reply"
-              @click="respondToFeedback(item)"
+              @click="openResponseDialog(item)"
             >
               Respond
             </v-btn>
@@ -119,7 +119,7 @@
               color="deepRed"
               variant="tonal"
               prepend-icon="mdi-reply"
-              @click="respondToFeedback(item)"
+              @click="openResponseDialog(item)"
             >
               Respond
             </v-btn>
@@ -150,7 +150,7 @@
               color="deepRed"
               variant="tonal"
               prepend-icon="mdi-reply"
-              @click="respondToFeedback(item)"
+              @click="openResponseDialog(item)"
             >
               Respond
             </v-btn>
@@ -243,7 +243,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { supabase } from '../supabase.js'
+import {
+  fetchFeedbackReports,
+  updateFeedbackStatus,
+  respondToFeedback as apiRespondToFeedback
+} from '../apiClient.js'
 
 const headers = [
   { title: 'User', value: 'user', width: '150px' },
@@ -295,35 +299,11 @@ function showSnackbar(text, color = 'success', icon = 'mdi-check-circle') {
 
 async function fetchReports() {
   try {
-    const { data: feedbacks, error: feedbackError } = await supabase
-      .from('feedback')
-      .select('id, user_id, message, archived, is_read')
-      .order('created_at', { ascending: false })
-    
-    if (feedbackError) {
-      console.error('Error fetching feedback:', feedbackError)
-      showSnackbar('Failed to load feedback', 'error', 'mdi-alert-circle')
-      reports.value = []
-      return
-    }
-
-    const userIds = [...new Set(feedbacks.map(fb => fb.user_id).filter(Boolean))]
-    let usersMap = {}
-    
-    if (userIds.length > 0) {
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, name')
-        .in('id', userIds)
-      if (!usersError && users) {
-        usersMap = Object.fromEntries(users.map(u => [u.id, u.name]))
-      }
-    }
-
+    const feedbacks = await fetchFeedbackReports()
     reports.value = (feedbacks || []).map(r => ({
       id: r.id,
       user_id: r.user_id,
-      user: usersMap[r.user_id] ?? 'Unknown',
+      user: r.user_name || r.user || 'Unknown',
       message: r.message,
       archived: r.archived === true || r.archived === 'true',
       is_read: r.is_read === true || r.is_read === 'true'
@@ -336,58 +316,48 @@ async function fetchReports() {
 }
 
 async function archiveFeedback(id) {
-  const { error } = await supabase
-    .from('feedback')
-    .update({ archived: true })
-    .eq('id', id)
-  
-  if (error) {
-    showSnackbar('Failed to archive feedback', 'error', 'mdi-alert-circle')
-  } else {
+  try {
+    await updateFeedbackStatus(id, { archived: true })
     showSnackbar('Feedback archived successfully', 'success', 'mdi-check-circle')
+  } catch (error) {
+    console.error('Error archiving feedback:', error)
+    showSnackbar('Failed to archive feedback', 'error', 'mdi-alert-circle')
   }
   await fetchReports()
 }
 
 async function unarchiveFeedback(id) {
-  const { error } = await supabase
-    .from('feedback')
-    .update({ archived: false })
-    .eq('id', id)
-  
-  if (error) {
-    showSnackbar('Failed to unarchive feedback', 'error', 'mdi-alert-circle')
-  } else {
+  try {
+    await updateFeedbackStatus(id, { archived: false })
     showSnackbar('Feedback unarchived successfully', 'success', 'mdi-check-circle')
+  } catch (error) {
+    console.error('Error unarchiving feedback:', error)
+    showSnackbar('Failed to unarchive feedback', 'error', 'mdi-alert-circle')
   }
   await fetchReports()
 }
 
 async function markAsRead(id) {
-  const { error } = await supabase
-    .from('feedback')
-    .update({ is_read: true })
-    .eq('id', id)
-  
-  if (error) {
+  try {
+    await updateFeedbackStatus(id, { is_read: true })
+  } catch (error) {
+    console.error('Error marking feedback as read:', error)
     showSnackbar('Failed to mark as read', 'error', 'mdi-alert-circle')
   }
   await fetchReports()
 }
 
 async function markAsUnread(id) {
-  const { error } = await supabase
-    .from('feedback')
-    .update({ is_read: false })
-    .eq('id', id)
-  
-  if (error) {
+  try {
+    await updateFeedbackStatus(id, { is_read: false })
+  } catch (error) {
+    console.error('Error marking feedback as unread:', error)
     showSnackbar('Failed to mark as unread', 'error', 'mdi-alert-circle')
   }
   await fetchReports()
 }
 
-function respondToFeedback(item) {
+function openResponseDialog(item) {
   currentFeedback.value = item
   responseMessage.value = ''
   responseDialog.value = true
@@ -400,63 +370,21 @@ async function sendResponse() {
   }
 
   sendingResponse.value = true
-  
   try {
-    console.log('Sending email for user_id:', currentFeedback.value.user_id)
-    
-    const response = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabase.supabaseKey}`,
-      },
-      body: JSON.stringify({
-        user_id: currentFeedback.value.user_id,
-        subject: 'Response to Your Feedback - PetTrackCare',
-        html: `
-          <h2>Thank you for your feedback!</h2>
-          <p>Dear ${currentFeedback.value.user},</p>
-          <p>We have reviewed your feedback and wanted to respond:</p>
-          <div style="background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px;">
-            <strong>Your feedback:</strong><br>
-            ${currentFeedback.value.message}
-          </div>
-          <div style="background: #e3f2fd; padding: 15px; margin: 10px 0; border-radius: 5px;">
-            <strong>Our response:</strong><br>
-            ${responseMessage.value}
-          </div>
-          <p>Thank you for helping us improve PetTrackCare!</p>
-          <p>Best regards,<br>PetTrackCare Admin Team</p>
-        `
-      })
+    await apiRespondToFeedback(currentFeedback.value.id, {
+      user_id: currentFeedback.value.user_id,
+      message: responseMessage.value
     })
-
-    const responseText = await response.text()
-    console.log('Raw response:', responseText)
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${responseText}`)
-    }
-
-    const data = JSON.parse(responseText)
-    console.log('Parsed response:', data)
-
-    if (data?.success && !data?.data?.error) {
-      showSnackbar('Response sent successfully!', 'success', 'mdi-check-circle')
-      // Mark as read after sending response
-      await markAsRead(currentFeedback.value.id)
-    } else {
-      const errorMsg = data?.data?.error?.message || data?.error || 'Unknown error'
-      showSnackbar('Failed to send response: ' + errorMsg, 'error', 'mdi-alert-circle')
-    }
-
+    showSnackbar('Response sent successfully!', 'success', 'mdi-check-circle')
+    await updateFeedbackStatus(currentFeedback.value.id, { is_read: true })
     responseDialog.value = false
     responseMessage.value = ''
   } catch (error) {
     console.error('Error sending response:', error)
-    showSnackbar('Failed to send response: ' + error.message, 'error', 'mdi-alert-circle')
+    showSnackbar('Failed to send response: ' + (error?.message || 'Unknown error'), 'error', 'mdi-alert-circle')
   } finally {
     sendingResponse.value = false
+    await fetchReports()
   }
 }
 

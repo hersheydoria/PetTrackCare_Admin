@@ -16,14 +16,9 @@
 </template>
 
 <script setup>
-import { supabase } from '../supabase'
-async function logout() {
-  // Sign out from Supabase
-  await supabase.auth.signOut()
-  // Clear local login state
-  localStorage.removeItem('isLoggedIn')
-  // Redirect to login page
-  window.location.href = '/login';
+function logout() {
+  localStorage.removeItem('pettrackcare_admin_token')
+  window.location.href = '/login'
 }
 </script>
 

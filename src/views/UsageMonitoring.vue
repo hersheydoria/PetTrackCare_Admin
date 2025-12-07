@@ -130,10 +130,9 @@
 
 <script setup>
 // filepath: c:\Users\User\OneDrive\Desktop\app\pettrackcare_admin\src\views\UsageMonitoring.vue
+// filepath: c:\Users\User\OneDrive\Desktop\app\pettrackcare_admin\src\views\UsageMonitoring.vue
 import { ref, watch, onMounted, computed } from 'vue'
-import { supabase } from '../supabase.js'
-import VChart from 'vue-echarts'
-
+import { fetchUsageMetrics } from '../apiClient.js'
 const roles = ['All', 'Owner', 'Sitter']
 const selectedRole = ref('All')
 
@@ -163,60 +162,29 @@ const behaviorChartOptions = computed(() => ({
   series: [{ data: [behaviorCount.value], type: 'bar', color: '#B82132' }]
 }))
 
-async function fetchLoginCount() {
-  let query = supabase.from('users').select('*', { count: 'exact', head: true })
-  if (selectedRole.value !== 'All') {
-    query = query.eq('role', selectedRole.value === 'Owner' ? 'Pet Owner' : 'Pet Sitter')
+async function loadMetrics() {
+  try {
+    const roleMap = {
+      Owner: 'Pet Owner',
+      Sitter: 'Pet Sitter'
+    }
+    const roleParam = roleMap[selectedRole.value] || undefined
+    const data = await fetchUsageMetrics(roleParam)
+    loginCount.value = data.login_count ?? 0
+    postCount.value = data.post_count ?? 0
+    gpsCount.value = data.gps_count ?? 0
+    behaviorCount.value = data.behavior_count ?? 0
+  } catch (error) {
+    console.error('Error loading usage metrics:', error)
+    loginCount.value = 0
+    postCount.value = 0
+    gpsCount.value = 0
+    behaviorCount.value = 0
   }
-  const { count } = await query
-  loginCount.value = count ?? 0
 }
 
-async function fetchPostCount() {
-  let query = supabase.from('community_posts').select('*', { count: 'exact', head: true })
-  if (selectedRole.value !== 'All') {
-    const { data: users } = await supabase
-      .from('users')
-      .select('id')
-      .eq('role', selectedRole.value === 'Owner' ? 'Pet Owner' : 'Pet Sitter')
-    const userIds = (users || []).map(u => u.id)
-    if (userIds.length) query = query.in('user_id', userIds)
-    else { postCount.value = 0; return }
-  }
-  const { count } = await query
-  postCount.value = count ?? 0
-}
-
-async function fetchGPSCount() {
-  let query = supabase.from('location_history').select('*', { count: 'exact', head: true })
-  const { count } = await query
-  gpsCount.value = count ?? 0
-}
-
-async function fetchBehaviorCount() {
-  let query = supabase.from('behavior_logs').select('id, user_id', { count: 'exact', head: true })
-  if (selectedRole.value !== 'All') {
-    const { data: users } = await supabase
-      .from('users')
-      .select('id')
-      .eq('role', selectedRole.value === 'Owner' ? 'Pet Owner' : 'Pet Sitter')
-    const userIds = (users || []).map(u => u.id)
-    if (userIds.length) query = query.in('user_id', userIds)
-    else { behaviorCount.value = 0; return }
-  }
-  const { count } = await query
-  behaviorCount.value = count ?? 0
-}
-
-async function fetchAll() {
-  await fetchLoginCount()
-  await fetchPostCount()
-  await fetchGPSCount()
-  await fetchBehaviorCount()
-}
-
-watch([selectedRole], fetchAll)
-onMounted(fetchAll)
+watch(selectedRole, loadMetrics)
+onMounted(loadMetrics)
 </script>
 
 <style scoped>

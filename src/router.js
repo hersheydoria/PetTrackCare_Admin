@@ -24,15 +24,18 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  // Simple auth check: if not logged in, redirect to login
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
-  if (to.path !== '/login' && !isLoggedIn) {
-    next('/login')
-  } else if (to.path === '/login' && isLoggedIn) {
-    next('/')
-  } else {
-    next()
+  const token = localStorage.getItem('pettrackcare_admin_token')
+  const isAuthenticated = Boolean(token)
+
+  if (to.path !== '/login' && !isAuthenticated) {
+    return next('/login')
   }
+
+  if (to.path === '/login' && isAuthenticated) {
+    return next('/')
+  }
+
+  next()
 })
 
 export default router

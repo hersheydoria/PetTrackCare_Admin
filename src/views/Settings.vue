@@ -158,8 +158,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { supabase } from '../supabase.js'
+import {
+  fetchAdminProfile,
+  updateAdminProfile,
+  updateAdminPassword
+} from '../apiClient.js'
 
 const adminProfile = ref({ id: '', name: '', active: true })
 const profileLoading = ref(false)
@@ -171,8 +174,6 @@ const snackbarMessage = ref('')
 const snackbarColor = ref('success')
 const snackbarIcon = ref('mdi-check-circle')
 
-const router = useRouter()
-
 function showMessage(message, color = 'success', icon = 'mdi-check-circle') {
   snackbarMessage.value = message
   snackbarColor.value = color
@@ -182,23 +183,10 @@ function showMessage(message, color = 'success', icon = 'mdi-check-circle') {
 
 async function fetchSettings() {
   try {
-    const { data: admin, error } = await supabase
-      .from('users')
-      .select('id, name, status')
-      .eq('role', 'Admin')
-      .single()
-    
-    if (error) {
-      console.error('Error fetching admin profile:', error)
-      showMessage('Failed to load settings', 'error', 'mdi-alert-circle')
-      return
-    }
-
-    if (admin) {
-      adminProfile.value.id = admin.id
-      adminProfile.value.name = admin.name ?? ''
-      adminProfile.value.active = admin.status !== 'Inactive'
-    }
+    const profile = await fetchAdminProfile()
+    adminProfile.value.id = profile.id ?? ''
+    adminProfile.value.name = profile.name ?? ''
+    adminProfile.value.active = profile.status !== 'Inactive'
   } catch (err) {
     console.error('Unexpected error:', err)
     showMessage('An unexpected error occurred', 'error', 'mdi-alert-circle')
@@ -213,20 +201,13 @@ async function updateProfile() {
 
   profileLoading.value = true
   try {
-    const { error } = await supabase
-      .from('users')
-      .update({
-        name: adminProfile.value.name,
-        status: adminProfile.value.active ? 'Active' : 'Inactive'
-      })
-      .eq('id', adminProfile.value.id)
-
-    if (error) {
-      showMessage(`Failed to update profile: ${error.message}`, 'error', 'mdi-alert-circle')
-    } else {
-      showMessage('Profile updated successfully!', 'success', 'mdi-check-circle')
-      await fetchSettings()
-    }
+    await updateAdminProfile({
+      id: adminProfile.value.id,
+      name: adminProfile.value.name,
+      status: adminProfile.value.active ? 'Active' : 'Inactive'
+    })
+    showMessage('Profile updated successfully!', 'success', 'mdi-check-circle')
+    await fetchSettings()
   } catch (err) {
     showMessage('An error occurred while updating profile', 'error', 'mdi-alert-circle')
   } finally {
@@ -252,17 +233,14 @@ async function updatePassword() {
 
   passwordLoading.value = true
   try {
-    const { error } = await supabase.auth.updateUser({
-      password: passwords.value.newPassword
+    await updateAdminPassword({
+      current_password: passwords.value.current,
+      new_password: passwords.value.newPassword
     })
-
-    if (error) {
-      showMessage(`Failed to update password: ${error.message}`, 'error', 'mdi-alert-circle')
-    } else {
-      showMessage('Password updated successfully!', 'success', 'mdi-check-circle')
-      passwords.value = { current: '', newPassword: '', confirmPassword: '' }
-    }
+    showMessage('Password updated successfully!', 'success', 'mdi-check-circle')
+    passwords.value = { current: '', newPassword: '', confirmPassword: '' }
   } catch (err) {
+    console.error('Password update failed:', err)
     showMessage('An error occurred while updating password', 'error', 'mdi-alert-circle')
   } finally {
     passwordLoading.value = false
